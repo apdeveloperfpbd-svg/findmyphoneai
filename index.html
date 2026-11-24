@@ -158,11 +158,11 @@
                 </button>
             </div>
 
-            <!-- Audio Spectrum Visualizer (Visual Only) -->
+            <!-- Audio Status Indicator -->
             <div class="w-full space-y-2">
                 <div class="flex items-center justify-between text-xs px-1">
-                    <span class="text-slate-400 font-medium">Input Audio Spectrum:</span>
-                    <span id="decibelLevel" class="text-cyan-400 font-mono font-bold">0 dB</span>
+                    <span class="text-slate-400 font-medium">Voice Engine Status:</span>
+                    <span id="decibelLevel" class="text-cyan-400 font-mono font-bold">STANDBY</span>
                 </div>
                 <canvas id="audioVisualizer" class="w-full h-12 bg-slate-950/80 rounded-xl border border-slate-800/80"></canvas>
             </div>
@@ -406,7 +406,6 @@
             console.warn("Firebase init error:", e);
         }
 
-        // Matches Realtime Database rule path: artifacts/$appId/users/$uid/settings
         function getUserSettingsRef(uid) {
             return ref(rtdb, `artifacts/${appId}/users/${uid}/settings/userProfile`);
         }
@@ -508,11 +507,9 @@
         };
 
         let isListening = false;
-        let audioCtx = null;
-        let analyser = null;
-        let micStream = null;
         let speechRecognition = null;
         let speechRestartTimer = null;
+        let visualizerTimer = null;
         let lastKeywordTriggerTime = 0;
         let alarmOscillators = [];
         let alarmInterval = null;
@@ -676,7 +673,6 @@
 
         async function requestAllPermissions() {
             let micOk = false;
-            let notifOk = false;
 
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -688,8 +684,7 @@
 
             if ('Notification' in window) {
                 try {
-                    const res = await Notification.requestPermission();
-                    if (res === 'granted') notifOk = true;
+                    await Notification.requestPermission();
                 } catch(e) {}
             }
 
@@ -768,7 +763,6 @@
             }
         }
 
-        // AUDIO VISUALIZER ENGINE (Visual Spectrum Only - No Sound Triggers)
         async function toggleAIListener() {
             if (isListening) {
                 stopAIListener();
@@ -778,35 +772,15 @@
         }
 
         async function startAIListener() {
-            try {
-                micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            isListening = true;
+            updateListeningUI(true);
+            startVisualWave();
+            startSpeechRecognition();
 
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                const source = audioCtx.createMediaStreamSource(micStream);
-                analyser = audioCtx.createAnalyser();
-                analyser.fftSize = 512;
-                analyser.smoothingTimeConstant = 0.4;
-                source.connect(analyser);
-
-                isListening = true;
-                updateListeningUI(true);
-
-                // Visual spectrum loop only
-                renderAudioVisualizer();
-
-                // Start Speech Recognition strictly for "phone" / "mobile"
-                startSpeechRecognition();
-
-                if (userState.wakeLock && 'wakeLock' in navigator) {
-                    try {
-                        wakeLockObj = await navigator.wakeLock.request('screen');
-                    } catch(e) {}
-                }
-
-            } catch (err) {
-                console.error("Microphone Access Error:", err);
-                document.getElementById('liveTranscript').innerText = "❌ Microphone access failed!";
-                showPermissionModal();
+            if (userState.wakeLock && 'wakeLock' in navigator) {
+                try {
+                    wakeLockObj = await navigator.wakeLock.request('screen');
+                } catch(e) {}
             }
         }
 
@@ -818,14 +792,9 @@
                 speechRestartTimer = null;
             }
 
-            if (micStream) {
-                micStream.getTracks().forEach(track => track.stop());
-                micStream = null;
-            }
-
-            if (audioCtx) {
-                audioCtx.close();
-                audioCtx = null;
+            if (visualizerTimer) {
+                clearInterval(visualizerTimer);
+                visualizerTimer = null;
             }
 
             if (speechRecognition) {
@@ -849,6 +818,7 @@
             const icon = document.getElementById('radarIcon');
             const text = document.getElementById('listenBtnText');
             const status = document.getElementById('speechStatus');
+            const badge = document.getElementById('decibelLevel');
 
             if (active) {
                 btn.className = "w-36 h-36 rounded-full bg-cyan-950 border-4 border-cyan-400 flex flex-col items-center justify-center transition-all duration-300 shadow-2xl shadow-cyan-500/40 animate-radar cursor-pointer";
@@ -858,6 +828,7 @@
                 text.className = "text-xs font-bold mt-2 text-cyan-300 tracking-wider";
                 status.innerText = "Listening...";
                 status.className = "text-emerald-400 font-semibold";
+                badge.innerText = "LIVE MIC";
             } else {
                 btn.className = "w-36 h-36 rounded-full bg-slate-900 border-4 border-slate-700 flex flex-col items-center justify-center transition-all duration-300 shadow-xl cursor-pointer";
                 icon.className = "w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 text-3xl";
@@ -866,46 +837,34 @@
                 text.className = "text-xs font-bold mt-2 text-slate-400 tracking-wider";
                 status.innerText = "Idle";
                 status.className = "text-amber-400";
-                document.getElementById('decibelLevel').innerText = "0 dB";
+                badge.innerText = "STANDBY";
                 document.getElementById('liveTranscript').innerText = 'Waiting for voice keywords: "phone", "mobile"...';
             }
         }
 
-        function renderAudioVisualizer() {
-            if (!isListening || !analyser) return;
-
-            const bufferLength = analyser.frequencyBinCount;
-            const freqData = new Uint8Array(bufferLength);
-            analyser.getByteFrequencyData(freqData);
-
-            let sum = 0;
-            for (let i = 0; i < bufferLength; i++) {
-                sum += freqData[i] * freqData[i];
-            }
-            const rms = Math.sqrt(sum / bufferLength);
-            const decibels = Math.min(100, Math.round((rms / 128) * 100));
-            document.getElementById('decibelLevel').innerText = `${decibels} dB`;
-
-            drawVisualizerCanvas(freqData, bufferLength);
-            requestAnimationFrame(renderAudioVisualizer);
-        }
-
-        function drawVisualizerCanvas(dataArray, bufferLength) {
+        function startVisualWave() {
+            if (visualizerTimer) clearInterval(visualizerTimer);
             const canvas = document.getElementById('audioVisualizer');
             const ctx = canvas.getContext('2d');
-            const width = canvas.width = canvas.offsetWidth;
-            const height = canvas.height = canvas.offsetHeight;
 
-            ctx.clearRect(0, 0, width, height);
-            const barWidth = (width / bufferLength) * 2.5;
-            let x = 0;
+            visualizerTimer = setInterval(() => {
+                if (!isListening) return;
+                const width = canvas.width = canvas.offsetWidth;
+                const height = canvas.height = canvas.offsetHeight;
+                ctx.clearRect(0, 0, width, height);
 
-            for (let i = 0; i < bufferLength; i += 2) {
-                const barHeight = (dataArray[i] / 255) * height;
-                ctx.fillStyle = `rgb(6, ${Math.min(255, barHeight * 4 + 100)}, 212)`;
-                ctx.fillRect(x, height - barHeight, barWidth, barHeight);
-                x += barWidth + 1;
-            }
+                const bars = 28;
+                const gap = 4;
+                const barWidth = Math.max(3, (width - (bars - 1) * gap) / bars);
+
+                for (let i = 0; i < bars; i++) {
+                    const ratio = 0.2 + Math.random() * 0.75;
+                    const barHeight = ratio * height;
+                    const x = i * (barWidth + gap);
+                    ctx.fillStyle = "rgba(6, 182, 212, 0.85)";
+                    ctx.fillRect(x, height - barHeight, barWidth, barHeight);
+                }
+            }, 140);
         }
 
         function scheduleSpeechRestart(delayMs = 250) {
@@ -928,21 +887,22 @@
         function checkTranscriptForKeywords(rawText) {
             if (!rawText) return;
             const lower = rawText.toLowerCase();
-            const tokens = lower.split(/[^a-z0-9]+/).filter(Boolean);
-            const matchedKeyword = tokens.find(
-                w => w.includes('phone') || w.includes('mobile') || w.includes('fone')
-            );
+            const hasKeyword =
+                lower.includes('phone') ||
+                lower.includes('fone') ||
+                lower.includes('mobile') ||
+                lower.includes('ফোন') ||
+                lower.includes('মোবাইল');
 
-            if (matchedKeyword) {
+            if (hasKeyword) {
                 const now = Date.now();
-                if (now - lastKeywordTriggerTime > 2000) {
+                if (now - lastKeywordTriggerTime > 1500) {
                     lastKeywordTriggerTime = now;
-                    triggerPhoneAlarm(`Voice Keyword Detected: "${matchedKeyword}"`);
+                    triggerPhoneAlarm(`Voice Keyword Detected: "${rawText.trim()}"`);
                 }
             }
         }
 
-        // STRICT SPEECH RECOGNITION ("phone" / "mobile" ONLY)
         function startSpeechRecognition() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             const statusEl = document.getElementById('speechStatus');
@@ -951,7 +911,7 @@
             if (!SpeechRecognition) {
                 statusEl.innerText = "Unsupported";
                 statusEl.className = "text-red-400 font-semibold";
-                feedEl.innerText = "Speech Recognition is not supported on this browser.";
+                feedEl.innerText = "Browser does not support Web Speech API.";
                 return;
             }
 
@@ -974,12 +934,6 @@
                 if (!isListening) return;
                 statusEl.innerText = "Listening...";
                 statusEl.className = "text-emerald-400 font-semibold";
-            };
-
-            rec.onspeechstart = () => {
-                if (!isListening) return;
-                statusEl.innerText = "Hearing Voice...";
-                statusEl.className = "text-cyan-400 font-semibold";
             };
 
             rec.onresult = (event) => {
@@ -1006,11 +960,11 @@
                 if (errType === 'not-allowed' || errType === 'service-not-allowed') {
                     statusEl.innerText = "Blocked";
                     statusEl.className = "text-red-400 font-semibold";
-                    feedEl.innerText = "Microphone speech permission blocked by browser.";
+                    feedEl.innerText = "Microphone permission blocked.";
                     return;
                 }
-                if (errType !== 'no-speech' && errType !== 'aborted') {
-                    statusEl.innerText = "Retrying...";
+                if (errType === 'network') {
+                    statusEl.innerText = "Speech Server Issue";
                     statusEl.className = "text-amber-400 font-semibold";
                 }
                 scheduleSpeechRestart(350);
@@ -1018,8 +972,6 @@
 
             rec.onend = () => {
                 if (!isListening) return;
-                statusEl.innerText = "Listening...";
-                statusEl.className = "text-emerald-400 font-semibold";
                 scheduleSpeechRestart(180);
             };
 
