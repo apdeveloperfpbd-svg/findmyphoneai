@@ -512,6 +512,8 @@
         let analyser = null;
         let micStream = null;
         let speechRecognition = null;
+        let speechRestartTimer = null;
+        let lastKeywordTriggerTime = 0;
         let alarmOscillators = [];
         let alarmInterval = null;
         let customAudioElement = null;
@@ -650,6 +652,12 @@
             });
 
             document.getElementById('stopAlarmBtn').addEventListener('click', stopPhoneAlarm);
+
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible' && isListening) {
+                    scheduleSpeechRestart(150);
+                }
+            });
 
             updatePermissionBadges();
         });
@@ -805,6 +813,11 @@
         function stopAIListener() {
             isListening = false;
 
+            if (speechRestartTimer) {
+                clearTimeout(speechRestartTimer);
+                speechRestartTimer = null;
+            }
+
             if (micStream) {
                 micStream.getTracks().forEach(track => track.stop());
                 micStream = null;
@@ -816,7 +829,10 @@
             }
 
             if (speechRecognition) {
-                try { speechRecognition.stop(); } catch(e){}
+                try {
+                    speechRecognition.onend = null;
+                    speechRecognition.abort();
+                } catch(e){}
                 speechRecognition = null;
             }
 
@@ -892,46 +908,126 @@
             }
         }
 
+        function scheduleSpeechRestart(delayMs = 250) {
+            if (!isListening) return;
+            if (speechRestartTimer) clearTimeout(speechRestartTimer);
+            speechRestartTimer = setTimeout(() => {
+                if (!isListening) return;
+                try {
+                    if (speechRecognition) {
+                        speechRecognition.start();
+                    } else {
+                        startSpeechRecognition();
+                    }
+                } catch (e) {
+                    startSpeechRecognition();
+                }
+            }, delayMs);
+        }
+
+        function checkTranscriptForKeywords(rawText) {
+            if (!rawText) return;
+            const lower = rawText.toLowerCase();
+            const tokens = lower.split(/[^a-z0-9]+/).filter(Boolean);
+            const matchedKeyword = tokens.find(
+                w => w.includes('phone') || w.includes('mobile') || w.includes('fone')
+            );
+
+            if (matchedKeyword) {
+                const now = Date.now();
+                if (now - lastKeywordTriggerTime > 2000) {
+                    lastKeywordTriggerTime = now;
+                    triggerPhoneAlarm(`Voice Keyword Detected: "${matchedKeyword}"`);
+                }
+            }
+        }
+
         // STRICT SPEECH RECOGNITION ("phone" / "mobile" ONLY)
         function startSpeechRecognition() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            const statusEl = document.getElementById('speechStatus');
+            const feedEl = document.getElementById('liveTranscript');
+
             if (!SpeechRecognition) {
-                console.warn("Speech Recognition not supported in this browser.");
+                statusEl.innerText = "Unsupported";
+                statusEl.className = "text-red-400 font-semibold";
+                feedEl.innerText = "Speech Recognition is not supported on this browser.";
                 return;
             }
 
-            speechRecognition = new SpeechRecognition();
-            speechRecognition.continuous = true;
-            speechRecognition.interimResults = true;
-            speechRecognition.lang = 'en-US';
+            if (speechRecognition) {
+                try {
+                    speechRecognition.onend = null;
+                    speechRecognition.abort();
+                } catch (e) {}
+                speechRecognition = null;
+            }
 
-            speechRecognition.onresult = (event) => {
-                let transcript = '';
+            const rec = new SpeechRecognition();
+            speechRecognition = rec;
+            rec.continuous = true;
+            rec.interimResults = true;
+            rec.maxAlternatives = 3;
+            rec.lang = 'en-US';
+
+            rec.onstart = () => {
+                if (!isListening) return;
+                statusEl.innerText = "Listening...";
+                statusEl.className = "text-emerald-400 font-semibold";
+            };
+
+            rec.onspeechstart = () => {
+                if (!isListening) return;
+                statusEl.innerText = "Hearing Voice...";
+                statusEl.className = "text-cyan-400 font-semibold";
+            };
+
+            rec.onresult = (event) => {
+                if (!isListening) return;
+                let combinedTranscript = '';
                 for (let i = event.resultIndex; i < event.results.length; i++) {
-                    transcript += event.results[i][0].transcript.toLowerCase();
+                    const res = event.results[i];
+                    for (let j = 0; j < res.length; j++) {
+                        const altText = res[j].transcript || '';
+                        combinedTranscript += (j === 0 ? altText : ' ' + altText);
+                    }
                 }
 
-                document.getElementById('liveTranscript').innerText = `"${transcript}"`;
-
-                // Strict Keyword Filtering: ONLY 'phone', 'mobile', or 'fone'
-                const words = transcript.split(/\s+/);
-                const matchedKeyword = words.find(w => w.includes('phone') || w.includes('mobile') || w.includes('fone'));
-
-                if (matchedKeyword) {
-                    triggerPhoneAlarm(`Voice Keyword Detected: "${matchedKeyword}"`);
+                const cleanDisplay = combinedTranscript.trim();
+                if (cleanDisplay) {
+                    feedEl.innerText = `"${cleanDisplay}"`;
+                    checkTranscriptForKeywords(cleanDisplay);
                 }
             };
 
-            speechRecognition.onerror = (e) => {};
-            speechRecognition.onend = () => {
-                if (isListening && speechRecognition) {
-                    try { speechRecognition.start(); } catch(err){}
+            rec.onerror = (event) => {
+                if (!isListening) return;
+                const errType = event && event.error ? event.error : 'error';
+                if (errType === 'not-allowed' || errType === 'service-not-allowed') {
+                    statusEl.innerText = "Blocked";
+                    statusEl.className = "text-red-400 font-semibold";
+                    feedEl.innerText = "Microphone speech permission blocked by browser.";
+                    return;
                 }
+                if (errType !== 'no-speech' && errType !== 'aborted') {
+                    statusEl.innerText = "Retrying...";
+                    statusEl.className = "text-amber-400 font-semibold";
+                }
+                scheduleSpeechRestart(350);
+            };
+
+            rec.onend = () => {
+                if (!isListening) return;
+                statusEl.innerText = "Listening...";
+                statusEl.className = "text-emerald-400 font-semibold";
+                scheduleSpeechRestart(180);
             };
 
             try {
-                speechRecognition.start();
-            } catch(e){}
+                rec.start();
+            } catch (e) {
+                scheduleSpeechRestart(300);
+            }
         }
 
         // ALARM OVERLAY DISPLAY
