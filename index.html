@@ -510,6 +510,8 @@
         let speechRecognition = null;
         let speechRestartTimer = null;
         let visualizerTimer = null;
+        let speechGotAnyResult = false;
+        let speechFallbackTimer = null;
         let lastKeywordTriggerTime = 0;
         let alarmOscillators = [];
         let alarmInterval = null;
@@ -773,9 +775,18 @@
 
         async function startAIListener() {
             isListening = true;
+            speechGotAnyResult = false;
             updateListeningUI(true);
             startVisualWave();
             startSpeechRecognition();
+
+            if (speechFallbackTimer) clearTimeout(speechFallbackTimer);
+            speechFallbackTimer = setTimeout(() => {
+                if (isListening && !speechGotAnyResult) {
+                    const feedEl = document.getElementById('liveTranscript');
+                    feedEl.innerText = 'Speech API silent in this browser/session — say "phone" or "mobile" clearly or tap Test Alarm.';
+                }
+            }, 3500);
 
             if (userState.wakeLock && 'wakeLock' in navigator) {
                 try {
@@ -790,6 +801,11 @@
             if (speechRestartTimer) {
                 clearTimeout(speechRestartTimer);
                 speechRestartTimer = null;
+            }
+
+            if (speechFallbackTimer) {
+                clearTimeout(speechFallbackTimer);
+                speechFallbackTimer = null;
             }
 
             if (visualizerTimer) {
@@ -938,6 +954,7 @@
 
             rec.onresult = (event) => {
                 if (!isListening) return;
+                speechGotAnyResult = true;
                 let combinedTranscript = '';
                 for (let i = event.resultIndex; i < event.results.length; i++) {
                     const res = event.results[i];
