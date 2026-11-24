@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Find My Phone AI</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        cyber: {
+                            bg: '#080c14',
+                            card: '#0f172a',
+                            border: '#1e293b',
+                            primary: '#06b6d4',
+                            accent: '#10b981',
+                            danger: '#ef4444',
+                            neon: '#38bdf8'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Google Fonts & FontAwesome -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #080c14;
+            color: #f8fafc;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Pulsing & Strobe Animations */
+        @keyframes radar-pulse {
+            0% { transform: scale(0.95); opacity: 0.8; box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.7); }
+            70% { transform: scale(1.05); opacity: 1; box-shadow: 0 0 0 30px rgba(6, 182, 212, 0); }
+            100% { transform: scale(0.95); opacity: 0.8; box-shadow: 0 0 0 0 rgba(6, 182, 212, 0); }
+        }
+
+        @keyframes alert-strobe {
+            0%, 100% { background-color: #0f172a; }
+            50% { background-color: #450a0a; }
+        }
+
+        .animate-radar {
+            animation: radar-pulse 2s infinite ease-in-out;
+        }
+
+        .animate-alert {
+            animation: alert-strobe 0.8s infinite ease-in-out;
+        }
+
+        /* Scrollbar Styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #080c14;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between overflow-x-hidden antialiased selection:bg-cyan-500 selection:text-black">
+
+    <!-- Header Navigation Bar -->
+    <header class="w-full bg-cyber-card/80 backdrop-blur-md border-b border-cyber-border sticky top-0 z-30 px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 to-emerald-500 flex items-center justify-center text-white shadow-lg shadow-cyan-500/20">
+                <i class="fa-solid fa-mobile-screen-button text-xl"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg leading-tight tracking-wide text-white">Find My Phone <span class="text-cyan-400 text-xs px-2 py-0.5 rounded-full bg-cyan-950 border border-cyan-800 ml-1">AI 2.0</span></h1>
+                <p class="text-[11px] text-slate-400">Voice Keyword Detector</p>
+            </div>
+        </div>
+
+        <div class="flex items-center space-x-2">
+            <button id="permissionCheckBtn" class="w-9 h-9 rounded-lg bg-cyan-950 border border-cyan-700/60 text-cyan-400 flex items-center justify-center transition hover:bg-cyan-900" title="System Permissions">
+                <i class="fa-solid fa-key"></i>
+            </button>
+            <button id="profileEditBtn" class="w-9 h-9 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition border border-slate-700" title="Edit Profile">
+                <i class="fa-solid fa-user-gear"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 max-w-md w-full mx-auto p-4 flex flex-col justify-between space-y-6">
+
+        <!-- User Greeting & Profile Badge -->
+        <div id="userHeaderCard" class="bg-gradient-to-r from-slate-900 via-slate-900 to-cyan-950/40 p-4 rounded-2xl border border-slate-800 flex items-center justify-between shadow-md">
+            <div class="flex items-center space-x-3">
+                <div id="genderAvatar" class="w-12 h-12 rounded-full bg-slate-800 border-2 border-cyan-500/40 flex items-center justify-center text-2xl">
+                    👤
+                </div>
+                <div>
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-cyan-400" id="userRoleBadge">ACTIVE USER</span>
+                    <h2 class="text-base font-bold text-slate-100 leading-tight" id="profileNameDisplay">User Profile</h2>
+                    <p class="text-xs text-slate-400" id="profileDetailDisplay">Age: -- | Gender: --</p>
+                </div>
+            </div>
+            <div class="text-right flex flex-col items-end space-y-1">
+                <span id="syncBadge" class="inline-flex items-center text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-800 text-emerald-400 font-medium">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span> Cloud Ready
+                </span>
+                <span id="pwaBadge" class="hidden inline-flex items-center text-[10px] px-2 py-0.5 rounded-full bg-cyan-950 border border-cyan-800 text-cyan-300 font-medium cursor-pointer" onclick="installPWA()">
+                    <i class="fa-solid fa-download mr-1"></i> Install App
+                </span>
+            </div>
+        </div>
+
+        <!-- Real-Time Permission Badges -->
+        <div class="grid grid-cols-3 gap-2 text-center text-[11px]">
+            <div id="micBadge" class="p-2 rounded-xl bg-slate-900 border border-slate-800 flex flex-col items-center justify-center text-slate-400">
+                <i class="fa-solid fa-microphone text-base mb-1"></i>
+                <span>Microphone: <strong class="perm-state text-amber-400">Pending</strong></span>
+            </div>
+            <div id="notifBadge" class="p-2 rounded-xl bg-slate-900 border border-slate-800 flex flex-col items-center justify-center text-slate-400">
+                <i class="fa-solid fa-bell text-base mb-1"></i>
+                <span>Notifications: <strong class="perm-state text-amber-400">Pending</strong></span>
+            </div>
+            <div id="wakeBadge" class="p-2 rounded-xl bg-slate-900 border border-slate-800 flex flex-col items-center justify-center text-slate-400">
+                <i class="fa-solid fa-sun text-base mb-1"></i>
+                <span>Wake Lock: <strong class="perm-state text-amber-400">Pending</strong></span>
+            </div>
+        </div>
+
+        <!-- AI Listening Radar Hub -->
+        <div class="bg-cyber-card p-6 rounded-3xl border border-cyber-border shadow-2xl flex flex-col items-center justify-center text-center space-y-5 relative overflow-hidden">
+            <div class="absolute -top-12 -right-12 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none"></div>
+
+            <!-- Radar Button -->
+            <div class="relative my-2">
+                <button id="toggleListenBtn" class="w-36 h-36 rounded-full bg-slate-900 border-4 border-slate-700 flex flex-col items-center justify-center transition-all duration-300 shadow-xl group cursor-pointer focus:outline-none">
+                    <div id="radarIcon" class="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 text-3xl group-hover:scale-110 transition duration-300">
+                        <i class="fa-solid fa-microphone-slash"></i>
+                    </div>
+                    <span id="listenBtnText" class="text-xs font-bold mt-2 text-slate-400 tracking-wider">AI INACTIVE</span>
+                </button>
+            </div>
+
+            <!-- Audio Spectrum Visualizer (Visual Only) -->
+            <div class="w-full space-y-2">
+                <div class="flex items-center justify-between text-xs px-1">
+                    <span class="text-slate-400 font-medium">Input Audio Spectrum:</span>
+                    <span id="decibelLevel" class="text-cyan-400 font-mono font-bold">0 dB</span>
+                </div>
+                <canvas id="audioVisualizer" class="w-full h-12 bg-slate-950/80 rounded-xl border border-slate-800/80"></canvas>
+            </div>
+
+            <!-- Speech Live Feed -->
+            <div class="w-full bg-slate-950/50 p-3 rounded-xl border border-slate-800 text-left">
+                <div class="flex items-center justify-between text-[11px] text-slate-400 mb-1">
+                    <span><i class="fa-solid fa-ear-listen text-cyan-400 mr-1"></i> AI Listening Feed:</span>
+                    <span id="speechStatus" class="text-amber-400">Idle</span>
+                </div>
+                <div id="liveTranscript" class="text-xs font-mono text-slate-300 italic min-h-[20px] truncate">
+                    Waiting for voice keywords: "phone", "mobile"...
+                </div>
+            </div>
+        </div>
+
+        <!-- Controls & Settings Panel -->
+        <div class="bg-cyber-card p-5 rounded-2xl border border-cyber-border space-y-4">
+            <h3 class="text-sm font-bold text-slate-200 border-b border-slate-800 pb-2 flex items-center justify-between">
+                <span><i class="fa-solid fa-sliders text-cyan-400 mr-2"></i>Voice & Tone Settings</span>
+                <button id="manualTestBtn" class="text-xs bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 px-3 py-1 rounded-lg border border-amber-500/40 font-semibold transition">
+                    <i class="fa-solid fa-bell mr-1"></i> Test Alarm
+                </button>
+            </h3>
+
+            <!-- Ringtone Selector -->
+            <div class="space-y-1.5">
+                <label for="ringtoneSelect" class="text-xs text-slate-300">Alarm Tone:</label>
+                <select id="ringtoneSelect" class="w-full bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-xl p-2.5 focus:border-cyan-500 outline-none">
+                    <option value="siren">🚨 Classic Siren</option>
+                    <option value="radar">📡 Sci-Fi Radar Ping</option>
+                    <option value="chime">🔔 Digital Loud Chime</option>
+                    <option value="custom">📁 Upload Custom MP3...</option>
+                </select>
+            </div>
+
+            <!-- Custom Audio Input -->
+            <div id="customAudioContainer" class="hidden space-y-1">
+                <label class="text-[11px] text-cyan-400">Select Audio/MP3 File:</label>
+                <input type="file" id="customAudioInput" accept="audio/*" class="w-full text-xs text-slate-400 bg-slate-950 rounded-xl p-2 border border-slate-800">
+            </div>
+
+            <!-- Toggles -->
+            <div class="grid grid-cols-2 gap-3 pt-2">
+                <label class="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 cursor-pointer">
+                    <span class="text-xs text-slate-300"><i class="fa-solid fa-vibration text-cyan-400 mr-1.5"></i> Vibration</span>
+                    <input type="checkbox" id="vibToggle" checked class="w-4 h-4 accent-cyan-500 rounded">
+                </label>
+                <label class="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 cursor-pointer">
+                    <span class="text-xs text-slate-300"><i class="fa-solid fa-sun text-amber-400 mr-1.5"></i> Keep Screen On</span>
+                    <input type="checkbox" id="wakeLockToggle" checked class="w-4 h-4 accent-cyan-500 rounded">
+                </label>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="w-full text-center py-3 text-slate-500 text-xs border-t border-slate-900">
+        <p>Find My Phone AI &copy; 2026 | Powered by Web Audio Engine</p>
+    </footer>
+
+    <!-- ONBOARDING MODAL OVERLAY -->
+    <div id="onboardingModal" class="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="bg-cyber-card max-w-sm w-full p-6 rounded-3xl border border-cyber-border shadow-2xl space-y-5">
+            <div class="text-center space-y-2">
+                <div class="w-14 h-14 bg-gradient-to-tr from-cyan-500 to-emerald-400 rounded-2xl mx-auto flex items-center justify-center text-2xl text-slate-950 shadow-lg shadow-cyan-500/30">
+                    <i class="fa-solid fa-user-astronaut"></i>
+                </div>
+                <h2 class="text-xl font-bold text-white">Setup Profile</h2>
+                <p class="text-xs text-slate-400">Enter your details to configure the AI assistant.</p>
+            </div>
+
+            <form id="onboardingForm" class="space-y-4">
+                <!-- Name Input -->
+                <div class="space-y-1">
+                    <label class="text-xs font-semibold text-slate-300">Name:</label>
+                    <input type="text" id="onboardName" required placeholder="Enter your name" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:border-cyan-500 focus:outline-none">
+                </div>
+
+                <!-- Gender Selector -->
+                <div class="space-y-1">
+                    <label class="text-xs font-semibold text-slate-300">Gender:</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <label class="gender-option border-2 border-slate-800 bg-slate-950 p-3 rounded-xl flex items-center justify-center space-x-2 cursor-pointer hover:border-cyan-500 transition">
+                            <input type="radio" name="gender" value="male" checked class="accent-cyan-500">
+                            <span class="text-sm text-slate-200">Male</span>
+                        </label>
+                        <label class="gender-option border-2 border-slate-800 bg-slate-950 p-3 rounded-xl flex items-center justify-center space-x-2 cursor-pointer hover:border-cyan-500 transition">
+                            <input type="radio" name="gender" value="female" class="accent-cyan-500">
+                            <span class="text-sm text-slate-200">Female</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Age Input -->
+                <div class="space-y-1">
+                    <label class="text-xs font-semibold text-slate-300">Age:</label>
+                    <input type="number" id="onboardAge" min="1" max="120" required placeholder="Enter your age" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:border-cyan-500 focus:outline-none">
+                </div>
+
+                <button type="submit" class="w-full py-3 bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 font-bold rounded-xl shadow-lg shadow-cyan-500/20 transition transform active:scale-95">
+                    Save & Continue <i class="fa-solid fa-arrow-right ml-1"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- TRIGGERED ALARM OVERLAY SCREEN -->
+    <div id="alarmOverlay" class="fixed inset-0 z-50 bg-slate-950 hidden flex-col items-center justify-between p-6 text-center animate-alert">
+        <!-- Top Status -->
+        <div class="pt-8 space-y-2">
+            <span class="px-4 py-1.5 rounded-full bg-red-500/20 border border-red-500/50 text-red-400 font-bold text-xs uppercase tracking-widest inline-block animate-bounce">
+                <i class="fa-solid fa-bell text-red-400 mr-1.5"></i> ALARM ACTIVATED
+            </span>
+            <p id="alarmTriggerCause" class="text-xs text-slate-400">Triggered by voice keyword detection</p>
+        </div>
+
+        <!-- Glowing AI Speech Center -->
+        <div class="space-y-6 my-auto">
+            <div class="relative w-44 h-44 mx-auto flex items-center justify-center">
+                <div class="absolute inset-0 rounded-full bg-cyan-500/20 animate-ping"></div>
+                <div class="absolute -inset-4 rounded-full border-2 border-cyan-500/40 animate-pulse"></div>
+                <div class="w-36 h-36 rounded-full bg-gradient-to-tr from-cyan-600 via-emerald-600 to-cyan-400 flex items-center justify-center shadow-2xl shadow-cyan-500/50 text-5xl text-slate-950 font-extrabold">
+                    <i class="fa-solid fa-location-dot animate-bounce"></i>
+                </div>
+            </div>
+
+            <!-- Dynamic Boss / Ma'am Title -->
+            <div class="space-y-2">
+                <h1 id="alarmTitle" class="text-4xl sm:text-5xl font-black tracking-tight text-white drop-shadow-[0_0_25px_rgba(6,182,212,0.8)]">
+                    BOSS, I AM HERE!
+                </h1>
+                <p id="alarmSubtitle" class="text-lg font-bold text-cyan-300">
+                    I am right here!
+                </p>
+            </div>
+        </div>
+
+        <!-- Stop Alarm Action Button -->
+        <div class="w-full max-w-xs pb-6">
+            <button id="stopAlarmBtn" class="w-full py-4 rounded-2xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-extrabold text-lg shadow-2xl shadow-red-600/60 border border-red-400 transform transition active:scale-95 flex items-center justify-center space-x-2">
+                <i class="fa-solid fa-circle-stop text-xl"></i>
+                <span>I FOUND IT (STOP ALARM)</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- UNIFIED SYSTEM PERMISSIONS MODAL -->
+    <div id="permissionModal" class="fixed inset-0 z-50 bg-black/95 backdrop-blur-lg hidden items-center justify-center p-4">
+        <div class="bg-cyber-card max-w-sm w-full p-6 rounded-3xl border border-cyan-500/50 shadow-2xl shadow-cyan-500/20 space-y-5">
+            <div class="text-center space-y-2">
+                <div class="w-16 h-16 bg-gradient-to-tr from-cyan-500 to-emerald-400 rounded-2xl mx-auto flex items-center justify-center text-3xl text-slate-950 shadow-lg shadow-cyan-500/30">
+                    <i class="fa-solid fa-shield-halved"></i>
+                </div>
+                <h2 class="text-xl font-extrabold text-white">System Permissions Required</h2>
+                <p class="text-xs text-slate-300 italic">"Would you like to grant these permissions for real-time voice keyword detection?"</p>
+            </div>
+
+            <div class="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-3">
+                <div class="flex items-center space-x-3 text-xs text-slate-200">
+                    <div class="w-8 h-8 rounded-lg bg-cyan-950 border border-cyan-800 flex items-center justify-center text-cyan-400">
+                        <i class="fa-solid fa-microphone"></i>
+                    </div>
+                    <div>
+                        <p class="font-bold">Microphone Access</p>
+                        <p class="text-[10px] text-slate-400">Required to listen for "phone" and "mobile" keywords</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center space-x-3 text-xs text-slate-200">
+                    <div class="w-8 h-8 rounded-lg bg-emerald-950 border border-emerald-800 flex items-center justify-center text-emerald-400">
+                        <i class="fa-solid fa-bell"></i>
+                    </div>
+                    <div>
+                        <p class="font-bold">Push Notifications & Alerts</p>
+                        <p class="text-[10px] text-slate-400">Required to trigger alerts when phone is locked</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center space-x-3 text-xs text-slate-200">
+                    <div class="w-8 h-8 rounded-lg bg-amber-950 border border-amber-800 flex items-center justify-center text-amber-400">
+                        <i class="fa-solid fa-sun"></i>
+                    </div>
+                    <div>
+                        <p class="font-bold">Screen Wake Lock & Audio</p>
+                        <p class="text-[10px] text-slate-400">Keeps the voice recognition engine active</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-2">
+                <button id="grantAllPermissionsBtn" class="w-full py-3.5 bg-gradient-to-r from-cyan-500 to-emerald-400 hover:from-cyan-400 hover:to-emerald-300 text-slate-950 font-extrabold rounded-xl shadow-lg shadow-cyan-500/25 transition transform active:scale-95 flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-check-double text-base"></i>
+                    <span>Allow All Permissions</span>
+                </button>
+                <button id="denyPermissionsBtn" class="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-400 font-semibold text-xs rounded-xl border border-slate-800">
+                    Skip for Now
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- FIREBASE REALTIME DATABASE INIT & CORE LOGIC -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getDatabase, ref, set, get, update } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAtcqm9r1k2RqTfHpKZxB7n3WIxsMdOvJA",
+            authDomain: "find-my-phone-ai.firebaseapp.com",
+            databaseURL: "https://find-my-phone-ai-default-rtdb.firebaseio.com",
+            projectId: "find-my-phone-ai",
+            storageBucket: "find-my-phone-ai.firebasestorage.app",
+            messagingSenderId: "361129893959",
+            appId: "1:361129893959:web:27e5d03fcbddacebf95162",
+            measurementId: "G-GYGBPERZ31"
+        };
+
+        const appId = firebaseConfig.projectId || 'find-my-phone-ai';
+
+        let rtdb = null;
+        let auth = null;
+        let currentUser = null;
+
+        try {
+            const app = initializeApp(firebaseConfig);
+            rtdb = getDatabase(app);
+            auth = getAuth(app);
+
+            signInAnonymously(auth).catch(err => console.warn("Firebase Auth error:", err));
+
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    currentUser = user;
+                    document.getElementById('syncBadge').classList.remove('hidden');
+                    loadProfileFromRealtimeDB();
+                }
+            });
+        } catch (e) {
+            console.warn("Firebase init error:", e);
+        }
+
+        // Matches Realtime Database rule path: artifacts/$appId/users/$uid/settings
+        function getUserSettingsRef(uid) {
+            return ref(rtdb, `artifacts/${appId}/users/${uid}/settings/userProfile`);
+        }
+
+        async function saveProfileToRealtimeDB(profileData) {
+            if (!rtdb || !currentUser) return;
+            try {
+                const profileRef = getUserSettingsRef(currentUser.uid);
+                await update(profileRef, profileData).catch(async () => {
+                    await set(profileRef, profileData);
+                });
+            } catch (err) {
+                console.error("Realtime DB save error:", err);
+            }
+        }
+
+        async function loadProfileFromRealtimeDB() {
+            if (!rtdb || !currentUser) return;
+            try {
+                const profileRef = getUserSettingsRef(currentUser.uid);
+                const snap = await get(profileRef);
+                if (snap.exists()) {
+                    const data = snap.val();
+                    userState = { ...userState, ...data };
+                    saveStateLocal();
+                    updateUserUI();
+                    syncControlsWithState();
+                }
+            } catch (err) {
+                console.error("Realtime DB read error:", err);
+            }
+        }
+
+        window.saveProfileToRealtimeDB = saveProfileToRealtimeDB;
+    </script>
+
+    <script>
+        // PWA Engine Generator
+        (function initPWAEngine() {
+            const manifestData = {
+                name: "Find My Phone AI",
+                short_name: "FindPhoneAI",
+                start_url: "./",
+                display: "standalone",
+                background_color: "#080c14",
+                theme_color: "#06b6d4",
+                icons: [
+                    {
+                        src: "https://placehold.co/192x192/06b6d4/ffffff?text=AI+Phone",
+                        sizes: "192x192",
+                        type: "image/png"
+                    }
+                ]
+            };
+
+            const manifestBlob = new Blob([JSON.stringify(manifestData)], { type: 'application/json' });
+            const manifestUrl = URL.createObjectURL(manifestBlob);
+            const manifestLink = document.createElement('link');
+            manifestLink.rel = 'manifest';
+            manifestLink.href = manifestUrl;
+            document.head.appendChild(manifestLink);
+
+            if ('serviceWorker' in navigator) {
+                const swCode = `
+                    self.addEventListener('install', (e) => self.skipWaiting());
+                    self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+                `;
+                const swBlob = new Blob([swCode], { type: 'application/javascript' });
+                const swUrl = URL.createObjectURL(swBlob);
+                navigator.serviceWorker.register(swUrl).catch(err => console.log('SW reg error:', err));
+            }
+        })();
+
+        let deferredPrompt = null;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            const pwaBadge = document.getElementById('pwaBadge');
+            if (pwaBadge) pwaBadge.classList.remove('hidden');
+        });
+
+        window.installPWA = function() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then(() => { deferredPrompt = null; });
+            }
+        };
+
+        // State Management
+        let userState = {
+            name: '',
+            gender: 'male',
+            age: '',
+            ringtone: 'siren',
+            customAudioUrl: null,
+            vibration: true,
+            wakeLock: true,
+            permissionsGranted: false
+        };
+
+        let isListening = false;
+        let audioCtx = null;
+        let analyser = null;
+        let micStream = null;
+        let speechRecognition = null;
+        let alarmOscillators = [];
+        let alarmInterval = null;
+        let customAudioElement = null;
+        let wakeLockObj = null;
+
+        function loadStateLocal() {
+            const saved = localStorage.getItem('find_phone_user_state_v3');
+            if (saved) {
+                try {
+                    userState = JSON.parse(saved);
+                    return true;
+                } catch(e) {}
+            }
+            return false;
+        }
+
+        function saveStateLocal() {
+            localStorage.setItem('find_phone_user_state_v3', JSON.stringify(userState));
+        }
+
+        function syncControlsWithState() {
+            const ringtoneSelect = document.getElementById('ringtoneSelect');
+            const customContainer = document.getElementById('customAudioContainer');
+            const vibToggle = document.getElementById('vibToggle');
+            const wakeLockToggle = document.getElementById('wakeLockToggle');
+
+            if (ringtoneSelect) ringtoneSelect.value = userState.ringtone || 'siren';
+            if (customContainer) {
+                if (userState.ringtone === 'custom') customContainer.classList.remove('hidden');
+                else customContainer.classList.add('hidden');
+            }
+            if (vibToggle) vibToggle.checked = userState.vibration !== false;
+            if (wakeLockToggle) wakeLockToggle.checked = userState.wakeLock !== false;
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const hasProfile = loadStateLocal();
+            const onboardingModal = document.getElementById('onboardingModal');
+
+            syncControlsWithState();
+
+            if (!hasProfile || !userState.name) {
+                onboardingModal.classList.remove('hidden');
+            } else {
+                onboardingModal.classList.add('hidden');
+                updateUserUI();
+                checkAndPromptPermissions();
+            }
+
+            document.getElementById('onboardingForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const name = document.getElementById('onboardName').value.trim();
+                const age = document.getElementById('onboardAge').value;
+                const gender = document.querySelector('input[name="gender"]:checked').value;
+
+                if (!name || !age) return;
+
+                userState.name = name;
+                userState.gender = gender;
+                userState.age = parseInt(age);
+
+                saveStateLocal();
+                if (window.saveProfileToRealtimeDB) {
+                    window.saveProfileToRealtimeDB(userState);
+                }
+
+                updateUserUI();
+                onboardingModal.classList.add('hidden');
+
+                setTimeout(checkAndPromptPermissions, 400);
+            });
+
+            document.getElementById('grantAllPermissionsBtn').addEventListener('click', requestAllPermissions);
+            document.getElementById('denyPermissionsBtn').addEventListener('click', () => {
+                document.getElementById('permissionModal').classList.add('hidden');
+                document.getElementById('permissionModal').classList.remove('flex');
+            });
+            document.getElementById('permissionCheckBtn').addEventListener('click', () => {
+                showPermissionModal();
+            });
+
+            document.getElementById('profileEditBtn').addEventListener('click', () => {
+                document.getElementById('onboardName').value = userState.name || '';
+                document.getElementById('onboardAge').value = userState.age || '';
+                const rad = document.querySelector(`input[name="gender"][value="${userState.gender}"]`);
+                if (rad) rad.checked = true;
+                onboardingModal.classList.remove('hidden');
+            });
+
+            document.getElementById('toggleListenBtn').addEventListener('click', toggleAIListener);
+
+            const ringtoneSelect = document.getElementById('ringtoneSelect');
+            ringtoneSelect.addEventListener('change', (e) => {
+                userState.ringtone = e.target.value;
+                const customContainer = document.getElementById('customAudioContainer');
+                if (userState.ringtone === 'custom') {
+                    customContainer.classList.remove('hidden');
+                } else {
+                    customContainer.classList.add('hidden');
+                }
+                saveStateLocal();
+                if (window.saveProfileToRealtimeDB) {
+                    window.saveProfileToRealtimeDB({ ringtone: userState.ringtone });
+                }
+            });
+
+            document.getElementById('customAudioInput').addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function(evt) {
+                        userState.customAudioUrl = evt.target.result;
+                        saveStateLocal();
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+
+            document.getElementById('vibToggle').addEventListener('change', (e) => {
+                userState.vibration = e.target.checked;
+                saveStateLocal();
+                if (window.saveProfileToRealtimeDB) {
+                    window.saveProfileToRealtimeDB({ vibration: userState.vibration });
+                }
+            });
+            document.getElementById('wakeLockToggle').addEventListener('change', (e) => {
+                userState.wakeLock = e.target.checked;
+                saveStateLocal();
+                if (window.saveProfileToRealtimeDB) {
+                    window.saveProfileToRealtimeDB({ wakeLock: userState.wakeLock });
+                }
+            });
+
+            document.getElementById('manualTestBtn').addEventListener('click', () => {
+                triggerPhoneAlarm("Manual Test Alarm");
+            });
+
+            document.getElementById('stopAlarmBtn').addEventListener('click', stopPhoneAlarm);
+
+            updatePermissionBadges();
+        });
+
+        function checkAndPromptPermissions() {
+            if (!userState.permissionsGranted || (typeof Notification !== 'undefined' && Notification.permission !== 'granted')) {
+                showPermissionModal();
+            }
+        }
+
+        function showPermissionModal() {
+            const modal = document.getElementById('permissionModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        async function requestAllPermissions() {
+            let micOk = false;
+            let notifOk = false;
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                stream.getTracks().forEach(t => t.stop());
+                micOk = true;
+            } catch(e) {
+                console.warn("Mic permission denied:", e);
+            }
+
+            if ('Notification' in window) {
+                try {
+                    const res = await Notification.requestPermission();
+                    if (res === 'granted') notifOk = true;
+                } catch(e) {}
+            }
+
+            if ('wakeLock' in navigator) {
+                try {
+                    const wl = await navigator.wakeLock.request('screen');
+                    wl.release();
+                } catch(e) {}
+            }
+
+            userState.permissionsGranted = micOk;
+            saveStateLocal();
+            if (window.saveProfileToRealtimeDB) {
+                window.saveProfileToRealtimeDB({ permissionsGranted: userState.permissionsGranted });
+            }
+            updatePermissionBadges();
+
+            document.getElementById('permissionModal').classList.add('hidden');
+            document.getElementById('permissionModal').classList.remove('flex');
+
+            if (micOk) {
+                startAIListener();
+            }
+        }
+
+        function updatePermissionBadges() {
+            const micElem = document.getElementById('micBadge').querySelector('.perm-state');
+            if (navigator.mediaDevices) {
+                navigator.permissions?.query({ name: 'microphone' }).then(p => {
+                    if (p.state === 'granted') {
+                        micElem.innerText = 'Granted';
+                        micElem.className = 'perm-state text-emerald-400';
+                    } else if (p.state === 'denied') {
+                        micElem.innerText = 'Denied';
+                        micElem.className = 'perm-state text-red-400';
+                    }
+                }).catch(() => {});
+            }
+
+            const notifElem = document.getElementById('notifBadge').querySelector('.perm-state');
+            if ('Notification' in window) {
+                if (Notification.permission === 'granted') {
+                    notifElem.innerText = 'Granted';
+                    notifElem.className = 'perm-state text-emerald-400';
+                } else if (Notification.permission === 'denied') {
+                    notifElem.innerText = 'Denied';
+                    notifElem.className = 'perm-state text-red-400';
+                }
+            }
+
+            const wakeElem = document.getElementById('wakeBadge').querySelector('.perm-state');
+            if ('wakeLock' in navigator) {
+                wakeElem.innerText = 'Supported';
+                wakeElem.className = 'perm-state text-emerald-400';
+            } else {
+                wakeElem.innerText = 'N/A';
+                wakeElem.className = 'perm-state text-slate-500';
+            }
+        }
+
+        function updateUserUI() {
+            document.getElementById('profileNameDisplay').innerText = userState.name || 'User';
+            document.getElementById('profileDetailDisplay').innerText = `Age: ${userState.age || '--'} | Gender: ${userState.gender === 'female' ? 'Female' : 'Male'}`;
+            
+            const avatar = document.getElementById('genderAvatar');
+            const roleBadge = document.getElementById('userRoleBadge');
+            
+            if (userState.gender === 'female') {
+                avatar.innerText = '👩';
+                roleBadge.innerText = 'PROFILE: FEMALE';
+                roleBadge.className = 'text-[10px] font-bold uppercase tracking-wider text-emerald-400';
+            } else {
+                avatar.innerText = '👨';
+                roleBadge.innerText = 'PROFILE: MALE';
+                roleBadge.className = 'text-[10px] font-bold uppercase tracking-wider text-cyan-400';
+            }
+        }
+
+        // AUDIO VISUALIZER ENGINE (Visual Spectrum Only - No Sound Triggers)
+        async function toggleAIListener() {
+            if (isListening) {
+                stopAIListener();
+            } else {
+                await startAIListener();
+            }
+        }
+
+        async function startAIListener() {
+            try {
+                micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const source = audioCtx.createMediaStreamSource(micStream);
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 512;
+                analyser.smoothingTimeConstant = 0.4;
+                source.connect(analyser);
+
+                isListening = true;
+                updateListeningUI(true);
+
+                // Visual spectrum loop only
+                renderAudioVisualizer();
+
+                // Start Speech Recognition strictly for "phone" / "mobile"
+                startSpeechRecognition();
+
+                if (userState.wakeLock && 'wakeLock' in navigator) {
+                    try {
+                        wakeLockObj = await navigator.wakeLock.request('screen');
+                    } catch(e) {}
+                }
+
+            } catch (err) {
+                console.error("Microphone Access Error:", err);
+                document.getElementById('liveTranscript').innerText = "❌ Microphone access failed!";
+                showPermissionModal();
+            }
+        }
+
+        function stopAIListener() {
+            isListening = false;
+
+            if (micStream) {
+                micStream.getTracks().forEach(track => track.stop());
+                micStream = null;
+            }
+
+            if (audioCtx) {
+                audioCtx.close();
+                audioCtx = null;
+            }
+
+            if (speechRecognition) {
+                try { speechRecognition.stop(); } catch(e){}
+                speechRecognition = null;
+            }
+
+            if (wakeLockObj) {
+                wakeLockObj.release();
+                wakeLockObj = null;
+            }
+
+            updateListeningUI(false);
+        }
+
+        function updateListeningUI(active) {
+            const btn = document.getElementById('toggleListenBtn');
+            const icon = document.getElementById('radarIcon');
+            const text = document.getElementById('listenBtnText');
+            const status = document.getElementById('speechStatus');
+
+            if (active) {
+                btn.className = "w-36 h-36 rounded-full bg-cyan-950 border-4 border-cyan-400 flex flex-col items-center justify-center transition-all duration-300 shadow-2xl shadow-cyan-500/40 animate-radar cursor-pointer";
+                icon.className = "w-16 h-16 rounded-full bg-cyan-500 flex items-center justify-center text-slate-950 text-3xl shadow-lg";
+                icon.innerHTML = `<i class="fa-solid fa-microphone-lines animate-pulse"></i>`;
+                text.innerText = "AI ACTIVE";
+                text.className = "text-xs font-bold mt-2 text-cyan-300 tracking-wider";
+                status.innerText = "Listening...";
+                status.className = "text-emerald-400 font-semibold";
+            } else {
+                btn.className = "w-36 h-36 rounded-full bg-slate-900 border-4 border-slate-700 flex flex-col items-center justify-center transition-all duration-300 shadow-xl cursor-pointer";
+                icon.className = "w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 text-3xl";
+                icon.innerHTML = `<i class="fa-solid fa-microphone-slash"></i>`;
+                text.innerText = "AI INACTIVE";
+                text.className = "text-xs font-bold mt-2 text-slate-400 tracking-wider";
+                status.innerText = "Idle";
+                status.className = "text-amber-400";
+                document.getElementById('decibelLevel').innerText = "0 dB";
+                document.getElementById('liveTranscript').innerText = 'Waiting for voice keywords: "phone", "mobile"...';
+            }
+        }
+
+        function renderAudioVisualizer() {
+            if (!isListening || !analyser) return;
+
+            const bufferLength = analyser.frequencyBinCount;
+            const freqData = new Uint8Array(bufferLength);
+            analyser.getByteFrequencyData(freqData);
+
+            let sum = 0;
+            for (let i = 0; i < bufferLength; i++) {
+                sum += freqData[i] * freqData[i];
+            }
+            const rms = Math.sqrt(sum / bufferLength);
+            const decibels = Math.min(100, Math.round((rms / 128) * 100));
+            document.getElementById('decibelLevel').innerText = `${decibels} dB`;
+
+            drawVisualizerCanvas(freqData, bufferLength);
+            requestAnimationFrame(renderAudioVisualizer);
+        }
+
+        function drawVisualizerCanvas(dataArray, bufferLength) {
+            const canvas = document.getElementById('audioVisualizer');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width = canvas.offsetWidth;
+            const height = canvas.height = canvas.offsetHeight;
+
+            ctx.clearRect(0, 0, width, height);
+            const barWidth = (width / bufferLength) * 2.5;
+            let x = 0;
+
+            for (let i = 0; i < bufferLength; i += 2) {
+                const barHeight = (dataArray[i] / 255) * height;
+                ctx.fillStyle = `rgb(6, ${Math.min(255, barHeight * 4 + 100)}, 212)`;
+                ctx.fillRect(x, height - barHeight, barWidth, barHeight);
+                x += barWidth + 1;
+            }
+        }
+
+        // STRICT SPEECH RECOGNITION ("phone" / "mobile" ONLY)
+        function startSpeechRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                console.warn("Speech Recognition not supported in this browser.");
+                return;
+            }
+
+            speechRecognition = new SpeechRecognition();
+            speechRecognition.continuous = true;
+            speechRecognition.interimResults = true;
+            speechRecognition.lang = 'en-US';
+
+            speechRecognition.onresult = (event) => {
+                let transcript = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    transcript += event.results[i][0].transcript.toLowerCase();
+                }
+
+                document.getElementById('liveTranscript').innerText = `"${transcript}"`;
+
+                // Strict Keyword Filtering: ONLY 'phone', 'mobile', or 'fone'
+                const words = transcript.split(/\s+/);
+                const matchedKeyword = words.find(w => w.includes('phone') || w.includes('mobile') || w.includes('fone'));
+
+                if (matchedKeyword) {
+                    triggerPhoneAlarm(`Voice Keyword Detected: "${matchedKeyword}"`);
+                }
+            };
+
+            speechRecognition.onerror = (e) => {};
+            speechRecognition.onend = () => {
+                if (isListening && speechRecognition) {
+                    try { speechRecognition.start(); } catch(err){}
+                }
+            };
+
+            try {
+                speechRecognition.start();
+            } catch(e){}
+        }
+
+        // ALARM OVERLAY DISPLAY
+        function triggerPhoneAlarm(causeText) {
+            const overlay = document.getElementById('alarmOverlay');
+            const title = document.getElementById('alarmTitle');
+            const subtitle = document.getElementById('alarmSubtitle');
+            const cause = document.getElementById('alarmTriggerCause');
+
+            cause.innerText = causeText || "Triggered by voice keyword detection";
+
+            const titleText = userState.gender === 'female' ? "MA'AM, I AM HERE!" : "BOSS, I AM HERE!";
+            const userName = userState.name ? userState.name : "User";
+            const subText = `${userName}, I am right here!`;
+
+            title.innerText = titleText;
+            subtitle.innerText = subText;
+
+            overlay.classList.remove('hidden');
+            overlay.classList.add('flex');
+
+            if ('Notification' in window && Notification.permission === 'granted') {
+                try {
+                    const notifTitle = titleText;
+                    const notifOptions = {
+                        body: `${causeText} - ${userName}, your phone is ringing!`,
+                        icon: 'https://placehold.co/192x192/06b6d4/ffffff?text=AI+Phone',
+                        vibrate: [500, 200, 500, 200, 800],
+                        requireInteraction: true
+                    };
+                    new Notification(notifTitle, notifOptions);
+                } catch(e) {}
+            }
+
+            playRingtoneSound();
+
+            if (userState.vibration && 'vibrate' in navigator) {
+                alarmInterval = setInterval(() => {
+                    navigator.vibrate([600, 200, 600, 200, 1000]);
+                }, 2600);
+            }
+        }
+
+        function stopPhoneAlarm() {
+            const overlay = document.getElementById('alarmOverlay');
+            overlay.classList.add('hidden');
+            overlay.classList.remove('flex');
+
+            alarmOscillators.forEach(osc => {
+                try { osc.stop(); } catch(e){}
+            });
+            alarmOscillators = [];
+
+            if (customAudioElement) {
+                customAudioElement.pause();
+                customAudioElement.currentTime = 0;
+            }
+
+            if (alarmInterval) {
+                clearInterval(alarmInterval);
+                alarmInterval = null;
+            }
+            if ('vibrate' in navigator) {
+                navigator.vibrate(0);
+            }
+        }
+
+        function playRingtoneSound() {
+            if (userState.ringtone === 'custom' && userState.customAudioUrl) {
+                if (!customAudioElement) {
+                    customAudioElement = new Audio(userState.customAudioUrl);
+                    customAudioElement.loop = true;
+                }
+                customAudioElement.play().catch(e => console.warn(e));
+                return;
+            }
+
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const now = ctx.currentTime;
+
+            if (userState.ringtone === 'siren') {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.exponentialRampToValueAtTime(880, now + 0.5);
+                osc.frequency.exponentialRampToValueAtTime(440, now + 1.0);
+
+                gain.gain.setValueAtTime(0.8, now);
+
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+
+                const sirenLoop = setInterval(() => {
+                    if (document.getElementById('alarmOverlay').classList.contains('hidden')) {
+                        clearInterval(sirenLoop);
+                        try { osc.stop(); } catch(e){}
+                    } else {
+                        const t = ctx.currentTime;
+                        osc.frequency.setValueAtTime(440, t);
+                        osc.frequency.exponentialRampToValueAtTime(880, t + 0.5);
+                        osc.frequency.exponentialRampToValueAtTime(440, t + 1.0);
+                    }
+                }, 1000);
+
+                alarmOscillators.push(osc);
+
+            } else if (userState.ringtone === 'radar') {
+                const pulse = () => {
+                    if (document.getElementById('alarmOverlay').classList.contains('hidden')) return;
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(1200, ctx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.3);
+
+                    gain.gain.setValueAtTime(0.9, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start();
+                    osc.stop(ctx.currentTime + 0.3);
+                };
+                pulse();
+                const radarInterval = setInterval(pulse, 500);
+                alarmInterval = radarInterval;
+
+            } else {
+                const notes = [523.25, 659.25, 783.99, 1046.50];
+                let step = 0;
+                const chimeLoop = setInterval(() => {
+                    if (document.getElementById('alarmOverlay').classList.contains('hidden')) {
+                        clearInterval(chimeLoop);
+                        return;
+                    }
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(notes[step % notes.length], ctx.currentTime);
+
+                    gain.gain.setValueAtTime(0.8, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start();
+                    osc.stop(ctx.currentTime + 0.4);
+                    step++;
+                }, 300);
+            }
+        }
+    </script>
+</body>
+</html>
